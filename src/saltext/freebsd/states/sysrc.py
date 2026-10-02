@@ -23,7 +23,11 @@ def managed(name, value, **kwargs):
     name
         The variable name to set
     value
-        Value to set the variable to
+        Value to set the variable to. Quote it in YAML. An unquoted ``YES`` or
+        ``NO`` (also ``true``, ``false``, ``on`` and ``off``) is loaded as a
+        boolean and written as ``YES`` or ``NO``, and an unquoted integer is
+        written as its decimal value, so ``0755`` becomes ``755``. Other
+        unquoted values, such as ``1.5`` or an empty value, are rejected.
     file
         (optional) The rc file to add the variable to.
     jail
@@ -37,9 +41,29 @@ def managed(name, value, **kwargs):
           sysrc.managed:
             - name: syslogd_flags
             - value: -ss
+
+        sshd:
+          sysrc.managed:
+            - name: sshd_enable
+            - value: "YES"
     """
 
     ret = {"name": name, "changes": {}, "result": False, "comment": ""}
+
+    # YAML turns unquoted YES/NO/True/False into booleans and bare numbers into
+    # ints, but sysrc values are strings. Normalize them the same way sysrc.set
+    # does, so the comparison with the current value and the test-mode preview
+    # both use what will actually be written.
+    if isinstance(value, bool):
+        value = "YES" if value else "NO"
+    elif isinstance(value, int):
+        value = str(value)
+    if not isinstance(value, str):
+        ret["comment"] = (
+            f'Invalid value for "{name}": expected a string, got '
+            f"{type(value).__name__}. Quote the value in YAML."
+        )
+        return ret
 
     # Check the current state
     current_state = __salt__["sysrc.get"](name=name, **kwargs)
@@ -54,7 +78,7 @@ def managed(name, value, **kwargs):
         ret["comment"] = f'The value of "{name}" will be changed!'
         ret["changes"] = {
             "old": current_state,
-            "new": name + " = " + value + " will be set.",
+            "new": f"{name} = {value} will be set.",
         }
 
         # When test=true return none
