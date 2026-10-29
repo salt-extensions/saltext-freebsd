@@ -170,6 +170,9 @@ def create_venv(project_root=".", directory=None, pyver=None, system_site_packag
             f"--prompt=saltext-{discover_project_name()}",
             *venv_params,
         )
+        with local.venv(venv):
+            # We need at least pip 25.1 for dependency groups
+            local["python"]("-m", "pip", "install", "pip>=25.1")
     return venv
 
 

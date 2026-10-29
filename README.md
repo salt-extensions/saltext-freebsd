@@ -43,8 +43,31 @@ environment is present and the virtual environment is active.
 
 Without `direnv`, you can still run the automation explicitly:
 
+> [!NOTE]
+>
+> By default, `make dev` installs the latest Salt release from PyPI,
+> which requires compiling those of its dependencies that don't
+> provide pre-built wheels for FreeBSD.
+>
+> To avoid this, set the environment variable
+> `VENV_SYSTEM_SITE_PACKAGES` to `1` **before** running `make dev` (or
+> any `nox` session, including those invoked by the pre-commit hooks).
+> This disables `uv` and creates a venv that falls back to the system
+> Python's packages, so you can run against OS-packaged Salt (if
+> installed). Even without OS-packaged Salt, system packages that
+> satisfy Salt's requirements are reused instead of being compiled.
+> For the latter route, consider installing:
+>
+> - `py312-sqlite3`
+> - `py312-maturin`
+> - `py312-markupsafe`
+>
+> If some pre-commit hooks fail to run, you can skip them by setting
+> the `SKIP` environment variable to a comma-separated list of hook
+> IDs/aliases.
+
 ```bash
-sudo pkg install py312-sqlite3 py312-maturin py312-markupsafe uv py312-uv
+sudo pkg install uv py312-uv  # only when running without VENV_SYSTEM_SITE_PACKAGES
 make dev  # or python3 tools/initialize.py
 source .venv/bin/activate
 ```

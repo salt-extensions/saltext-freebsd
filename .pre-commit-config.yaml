@@ -71,7 +71,9 @@ repos:
       groups: [fmt]
       files: ^(?!(\.github/|changelog/|CHANGELOG\.md)).*\.md$
       additional_dependencies:
-      - mdformat-config
+      # mdformat-config depends on taplo, which has a broken sdist that's missing Cargo workspace members.
+      # Ensure platforms without binary wheels don't fail here.
+      - mdformat-config ; sys_platform == 'linux' or sys_platform == 'darwin' or sys_platform == 'win32'
       - git+https://github.com/salt-extensions/mdformat-myst.git@9640df7f3b3a056b8199a8376d9cd6e436397577
       - mdformat-pyproject
 
