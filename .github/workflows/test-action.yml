@@ -3,48 +3,125 @@ name: Testing
 
 on:
   workflow_call:
+    inputs:
+      checkout-ref:
+        required: false
+        type: string
+        default: ''
+
+permissions: {}
 
 jobs:
 
   FreeBSD:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    name: FreeBSD Tests
+    runs-on: ubuntu-26.04
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      id-token: write  # codecov upload
+
+    env:
+      # Salt and its dependencies are provided as system packages, which
+      # the session venvs inherit. This makes the tests run against the
+      # OS-packaged Salt release and avoids expensive source builds of
+      # binary dependencies.
+      VENV_SYSTEM_SITE_PACKAGES: '1'
 
     strategy:
       fail-fast: false
       max-parallel: 2
       matrix:
-        include:
-          - {salt-version: "3008.2", python-version: "3.12", osrelease: "14.4"}
-          - {salt-version: "3008.2", python-version: "3.12", osrelease: "15.1"}
+        osrelease:
+          - "15.1"
+          - "14.5"
 
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
+          ref: ${{ inputs.checkout-ref || github.sha }}
           fetch-depth: 2  # coverage: Issue detecting commit SHA
+          persist-credentials: false
 
       - name: Start VM
-        uses: vmactions/freebsd-vm@v1
+        uses: vmactions/freebsd-vm@c46abacb49f09938ca4e1702d15d836285d694cc  # v1.5.9
         with:
-          release: ${{ matrix.osrelease }}
-          usesh: true
+          release: "${{ matrix.osrelease }}"
+          envs: 'SKIP_REQUIREMENTS_INSTALL VENV_SYSTEM_SITE_PACKAGES'
+          custom-shell-name: freebsd
+          # Cache the prepared VM image, keyed on the `prepare` script's hash
+          cache-after-prepare: true
+          prepare: |-
+            pkg install -y git python3 py312-salt py312-sqlite3 py312-pip
+            env PIP_BREAK_SYSTEM_PACKAGES=1 python3 -m pip install "nox==2026.10.20"
+            # Without the OS-packaged Salt, tests would pull in Salt from
+            # PyPI, which fails in confusing ways (if at all).
+            python3 -c 'import salt'
 
-      - name: Install dependencies
+      - name: System Salt Versions Report
         shell: freebsd {0}
         run: |
-          pkg install -y python3 py312-build py312-cryptography py312-sqlite3 py312-maturin py312-markupsafe py312-pyzmq py312-setuptools-scm py312-uv py312-wheel nox rust uv
+          python3 -c 'from salt.version import versions_report; print("\n".join(versions_report()))'
 
       - name: Install Test Requirements
         shell: freebsd {0}
-        env:
-          SALT_REQUIREMENT: salt==${{ matrix.salt-version }}
         run: |
-          nox --force-color -e tests-3 --install-only
+          nox --force-color --force-python=3 -e tests --install-only
 
       - name: Test
         shell: freebsd {0}
         env:
-          SALT_REQUIREMENT: salt==${{ matrix.salt-version }}
-          SKIP_REQUIREMENTS_INSTALL: true
+          SKIP_REQUIREMENTS_INSTALL: '1'
         run: |
-          nox --force-color -e tests-3 -- -vv --instafail tests/
+          nox --force-color --force-python=3 -e tests -- -vv --instafail tests/
+
+      - name: Create Codecov Flags
+        id: codecov-flags
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: |
+          # ${GITHUB_JOB,,} requires bash 4+, but macOS runners ship bash 3.2
+          os="$(tr '[:upper:]' '[:lower:]' <<< "$GITHUB_JOB")"
+          os="${os//-/_}"
+
+          echo "project=project,project_${os}" >> "$GITHUB_OUTPUT"
+          echo "tests=tests,tests_${os}" >> "$GITHUB_OUTPUT"
+
+      - name: Upload Project Code Coverage
+        if: ${{ !cancelled() }}
+        uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5  # v7.1.1
+        with:
+          files: artifacts/coverage-project.xml
+          disable_search: true
+          fail_ci_if_error: false
+          handle_no_reports_found: true
+          flags: ${{ steps.codecov-flags.outputs.project }}
+          name: ${{ github.job }}-${{ matrix.osrelease }}-project
+          use_oidc: true
+          version: v11.3.1
+
+      - name: Upload Tests Code Coverage
+        if: ${{ !cancelled() }}
+        uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5  # v7.1.1
+        with:
+          files: artifacts/coverage-tests.xml
+          disable_search: true
+          fail_ci_if_error: false
+          handle_no_reports_found: true
+          flags: ${{ steps.codecov-flags.outputs.tests }}
+          name: ${{ github.job }}-${{ matrix.osrelease }}-tests
+          use_oidc: true
+          version: v11.3.1
+
+      - name: Upload Logs
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
+        with:
+          name: runtests-${{ github.job }}-${{ matrix.osrelease }}.log
+          path: artifacts/runtests-*.log
+
+      - name: Upload Exit Status
+        if: ${{ !cancelled() }}
+        uses: $/.github/actions/upload-exitstatus
+        with:
+          name: ${{ github.job }}-${{ matrix.osrelease }}
