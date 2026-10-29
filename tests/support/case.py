@@ -411,10 +411,6 @@ class ShellCase(TestCase, AdaptedConfigurationTestCaseMixin, ScriptPathMixin):
         if salt.utils.platform.is_windows():
             # Windows does not support closing FDs
             close_fds = False
-        elif salt.utils.platform.is_freebsd() and sys.version_info < (3, 9):
-            # Closing FDs in FreeBSD before Py3.9 can be slow
-            #   https://bugs.python.org/issue38061
-            close_fds = False
         else:
             close_fds = True
 
