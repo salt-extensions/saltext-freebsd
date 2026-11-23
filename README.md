@@ -104,4 +104,4 @@ appreciate every contribution!
 [PRs]: https://github.com/asomers/saltext-freebsd/pulls
 [discussions]: https://github.com/asomers/saltext-freebsd/discussions
 [comments]: https://conventionalcomments.org/
-[docs]: https://asomers.github.io/saltext-freebsd/
+[docs]: https://salt-extensions.github.io/saltext-freebsd/

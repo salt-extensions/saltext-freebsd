@@ -48,7 +48,7 @@ content-type = "text/markdown"
 
 [project.urls]
 Homepage = "https://github.com/asomers/saltext-freebsd"
-Documentation = "https://asomers.github.io/saltext-freebsd/"
+Documentation = "https://salt-extensions.github.io/saltext-freebsd/"
 Source = "https://github.com/asomers/saltext-freebsd"
 Tracker = "https://github.com/asomers/saltext-freebsd/issues"
 
